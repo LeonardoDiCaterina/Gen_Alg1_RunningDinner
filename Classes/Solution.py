@@ -109,9 +109,9 @@ class Solution(ABC):
     @property
     def get_genome(self):
         """
-        Getter for the partecipants.
+        Getter for the participants.
         Returns:
-            np.array: The partecipants.
+            np.array: The participants.
         """
         return np.array(self.genome)
     
@@ -141,7 +141,7 @@ class Solution(ABC):
         
         intersection = (genome_a == genome_b).astype(int)
         
-        # shuffle only the different partecipants keeping the intersection in place        
+        # shuffle only the different participants keeping the intersection in place        
         genome_a[intersection == 0] = np.random.permutation(genome_a [intersection == 0])
         
         new_solution.set_genome(genome_a)
@@ -166,11 +166,11 @@ class Solution(ABC):
 
     
     
-    # I'm going t make a swap operator to swap the partecipants of two solutions
+    # I'm going t make a swap operator to swap the participants of two solutions
     def swap(self, p1: int, p2: int):
         mutant = self.copy_solution
         
-        # swap the partecipants
+        # swap the participants
         place1 = np.where(self.get_genome == p1)
         place2 = np.where(self.get_genome == p2)
         
