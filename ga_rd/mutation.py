@@ -1,11 +1,15 @@
 # For your project to be successful you must implement at least 3 mutation operators
 
 # ga_rd/mutation.py
+from __future__ import annotations
 import random
 import numpy as np
 from copy import deepcopy
 from typing import TYPE_CHECKING
-from .Individual_RD import IndividualRD
+
+# Only import IndividualRD for type checking—won't happen at runtime
+if TYPE_CHECKING:
+    from .Individual_RD import IndividualRD
 
 """
 Three mutation operators for the Running Dinner GA:
@@ -15,10 +19,8 @@ Three mutation operators for the Running Dinner GA:
 
 Each function takes an IndividualRD and returns a new mutated IndividualRD.
 """
-# Only import IndividualRD for type checking—won't happen at runtime
-if TYPE_CHECKING:
-    from .Individual_RD import IndividualRD
 
+# Maximum number of retries for mutation attempts
 MAX_MUTATION_RETRIES = 5
 
 def swap_mutation(ind: IndividualRD, max_retries: int = MAX_MUTATION_RETRIES, verbose: bool = False) -> IndividualRD:
@@ -28,7 +30,7 @@ def swap_mutation(ind: IndividualRD, max_retries: int = MAX_MUTATION_RETRIES, ve
     for attempt in range(1, max_retries+1):
         mutant = deepcopy(ind)
         n_h   = mutant.solution.n_houses
-        L     = mutant.solution.genome.size
+        L     = len(mutant.solution.genome)  # Use len() instead of .size
 
         # choose segment
         if random.random() < 0.5:
@@ -42,7 +44,7 @@ def swap_mutation(ind: IndividualRD, max_retries: int = MAX_MUTATION_RETRIES, ve
 
         # validate
         if mutant.solution.check_validity_of_genome():
-            if verbose:
+            if verbose: 
                 print(f"[swap_mutation] Success on attempt {attempt}: swapped {i}<->{j}")
             return mutant
 
@@ -56,9 +58,9 @@ def scramble_mutation(ind: IndividualRD, max_retries: int = MAX_MUTATION_RETRIES
     """
     for attempt in range(1, max_retries+1):
         mutant = deepcopy(ind)
-        genome = mutant.solution.get_genome.copy()
+        genome = mutant.solution.genome.copy()  # Direct access to genome
         n_h    = mutant.solution.n_houses
-        L      = genome.size
+        L      = len(genome)  # Use len() instead of .size
 
         # choose segment
         if random.random() < 0.5:
@@ -66,7 +68,14 @@ def scramble_mutation(ind: IndividualRD, max_retries: int = MAX_MUTATION_RETRIES
         else:
             seg0, seg1 = n_h, L
 
+        # Ensure we have at least 2 elements to scramble
+        if seg1 - seg0 < 2:
+            continue
+
         i, j = sorted(random.sample(range(seg0, seg1), 2))
+        if j - i < 2:  # Need at least 2 elements to scramble
+            continue
+            
         genome[i:j] = np.random.permutation(genome[i:j])
         mutant.solution.set_genome(genome)
         mutant._fitness = None
@@ -86,17 +95,24 @@ def inversion_mutation(ind: IndividualRD, max_retries: int = MAX_MUTATION_RETRIE
     """
     for attempt in range(1, max_retries+1):
         mutant = deepcopy(ind)
-        genome = mutant.solution.get_genome.copy()
+        genome = mutant.solution.genome.copy()  # Direct access to genome
         n_h    = mutant.solution.n_houses
-        L      = genome.size
+        L      = len(genome)  # Use len() instead of .size
 
         if random.random() < 0.5:
             seg0, seg1 = 0, n_h
         else:
             seg0, seg1 = n_h, L
 
+        # Ensure we have at least 2 elements to invert
+        if seg1 - seg0 < 2:
+            continue
+
         i, j = sorted(random.sample(range(seg0, seg1), 2))
-        genome[i:j] = genome[i:j][::-1]
+        if j - i < 2:  # Need at least 2 elements to invert
+            continue
+            
+        genome[i:j] = genome[i:j][::-1]  # Invert the slice
         mutant.solution.set_genome(genome)
         mutant._fitness = None
 

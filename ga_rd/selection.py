@@ -3,7 +3,7 @@
 # ga_rd/selection.py
 import random
 from typing import List
-from ga_rd.Individual_RD import IndividualRD
+from .Individual_RD import IndividualRD
 
 """
 Two selection mechanisms for the Running Dinner GA:

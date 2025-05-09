@@ -2,13 +2,15 @@
 
 # ga_rd/crossover.py
 import numpy as np
+import random
 from copy import deepcopy
 from typing import Tuple
-from ga_rd.Solution_RD import SolutionRD
+from .Solution_RD import SolutionRD
+from .repair import _repair_houses, _repair_participants
 
 """
 Two crossover operators for the Running Dinner GA:
-- XX NEED TO COMPLETE XX crossover and then update 
+- pmx_crossover: Partially Mapped Crossover (PMX) 
 - Uniform crossover
 
 The crossover operators are implemented as functions that take two
@@ -16,163 +18,171 @@ SolutionRD parents and return a new SolutionRD child.
 The child genome is then repaired to ensure it satisfies all hard constraints.
 """
 
+def pmx_crossover(
+    parent1: SolutionRD,
+    parent2: SolutionRD,
+    max_retries: int = 10,
+    verbose: bool = False
+) -> tuple[SolutionRD, SolutionRD]:
+    """
+    Partially Mapped Crossover (PMX) producing two offspring, with repair & validation.
+    
+    This specialized crossover works well for permutation problems like the running dinner.
+    PMX preserves relative order and position of elements from parents while avoiding duplicates.
+    
+    Algorithm:
+    1) Select two random crossover points
+    2) Copy the segment between points from parent1 to child1 (and parent2 to child2)
+    3) Map corresponding elements between the segments to build replacement mappings
+    4) Fill remaining positions using the mapping rules to prevent duplicates
+    
+    Args:
+        parent1, parent2: the two parents
+        max_retries: how many attempts before fallback
+        verbose: print progress if True
+        
+    Returns:
+        (child1, child2): two valid SolutionRD offspring
+    """
+    L = len(parent1.genome)
+    n_h = parent1.n_houses
+    
+    for attempt in range(1, max_retries + 1):
+        # We'll apply PMX to the participant segments only
+        # Select segment of genome to focus on (house assignments or one of the participant blocks)
+        if random.random() < 0.5:
+            # House assignments segment
+            segment_start = 0
+            segment_end = n_h
+        else:
+            # One of the participant blocks
+            course = random.randint(0, parent1.n_courses - 1)
+            block_size = parent1.n_participants + parent1.empty_spots
+            segment_start = n_h + course * block_size
+            segment_end = segment_start + block_size
+        
+        # Select crossover points within the selected segment
+        cp1, cp2 = sorted(random.sample(range(segment_start, segment_end), 2))
+        
+        if verbose:
+            print(f"[PMX] attempt {attempt}, segment=[{segment_start}:{segment_end}], " 
+                  f"crossover points=[{cp1}:{cp2}]")
+        
+        # Create initial children by copying parents
+        g1 = parent1.genome.copy()
+        g2 = parent2.genome.copy()
+        
+        # Copy segment between crossover points
+        segment1 = parent1.genome[cp1:cp2].copy()
+        segment2 = parent2.genome[cp1:cp2].copy()
+        
+        # Step 1: Copy the segment from parent1 to child2 and parent2 to child1
+        g1[cp1:cp2] = segment2
+        g2[cp1:cp2] = segment1
+        
+        # Step 2: Create mappings for the swapped segments
+        map1 = {}  # Maps from parent2 to parent1
+        map2 = {}  # Maps from parent1 to parent2
+        for i in range(len(segment1)):
+            map1[segment2[i]] = segment1[i]
+            map2[segment1[i]] = segment2[i]
+        
+        # Step 3: Fill in the remaining positions using the mappings
+        for i in list(range(segment_start, cp1)) + list(range(cp2, segment_end)):
+            # For child1
+            value1 = parent1.genome[i]
+            while value1 in map1:
+                value1 = map1[value1]
+            g1[i] = value1
+            
+            # For child2
+            value2 = parent2.genome[i]
+            while value2 in map2:
+                value2 = map2[value2]
+            g2[i] = value2
+        
+        # Repair both children
+        g1 = _repair_houses(g1, parent1)
+        g1 = _repair_participants(g1, parent1)
+        g2 = _repair_houses(g2, parent1)
+        g2 = _repair_participants(g2, parent1)
+        
+        # Create SolutionRD objects from the repaired genomes
+        c1 = deepcopy(parent1)
+        c2 = deepcopy(parent1)
+        c1.set_genome(g1)
+        c2.set_genome(g2)
+        
+        # Check validity
+        valid1 = c1.check_validity_of_genome(verbose=False)
+        valid2 = c2.check_validity_of_genome(verbose=False)
+        
+        if valid1 and valid2:
+            if verbose:
+                print(f"[PMX] success on attempt {attempt}")
+            return c1, c2
+    
+    # Fallback if no valid children found
+    if verbose:
+        print("[PMX] retries exhausted; falling back per child")
+    
+    fallback1 = deepcopy(parent1 if parent1.fitness <= parent2.fitness else parent2)
+    fallback2 = deepcopy(parent1 if parent1.fitness <= parent2.fitness else parent2)
+    return fallback1, fallback2
+
 def uniform_crossover(
     parent1: SolutionRD,
     parent2: SolutionRD,
     max_retries: int = 10,
     verbose: bool = False
-) -> SolutionRD:
+) -> tuple[SolutionRD, SolutionRD]:
     """
-    Uniform crossover with repair and validation, with optional verbose output.
-    
-    Tries up to `max_retries` to produce a valid child genome:
-      1) Mix genes via uniform mask
-      2) Repair house segment and participant blocks
-      3) Validate; if valid, return child
-      4) Otherwise retry
-    
-    If all retries fail, falls back to the fitter of the two parents.
-    
+    Uniform crossover producing two offspring, with repair & validation.
+
+    Repeated up to `max_retries`:
+      1) Draw random mask of length L
+      2) child1.genome = where(mask, p1, p2); child2 = where(mask, p2, p1)
+      3) Repair & validate both
+      4) If both valid, return them; else retry
+
+    Fallback: invalid child → fitter parent.
+
     Args:
-        parent1 (SolutionRD): First parent solution.
-        parent2 (SolutionRD): Second parent solution.
-        max_retries (int): Max attempts before fallback.
-        verbose (bool): If True, print debug info on success or final fallback.
+        parent1, parent2: the two parents
+        max_retries: attempts before fallback
+        verbose: print progress if True
+
     Returns:
-        SolutionRD: A valid offspring solution.
+        (child1, child2): two valid SolutionRD offspring
     """
+    L = len(parent1.genome)
     for attempt in range(1, max_retries + 1):
-        # 1) Mix genes
-        g1, g2 = parent1.genome, parent2.genome
-        mask   = np.random.rand(len(g1)) < 0.5
-        newg   = np.where(mask, g1, g2)
+        if verbose:
+            print(f"[uniform] attempt {attempt}")
 
-        # 2) Repair both segments
-        newg = _repair_houses(newg, parent1)
-        newg = _repair_participants(newg, parent1)
+        mask = np.random.rand(L) < 0.5
+        g1 = np.where(mask, parent1.genome, parent2.genome)
+        g2 = np.where(mask, parent2.genome, parent1.genome)
 
-        # 3) Wrap into a child and validate
-        child = deepcopy(parent1)
-        child.set_genome(newg)
-        if child.check_validity_of_genome():
+        g1 = _repair_houses(g1, parent1)
+        g1 = _repair_participants(g1, parent1)
+        g2 = _repair_houses(g2, parent1)
+        g2 = _repair_participants(g2, parent1)
+
+        c1 = deepcopy(parent1); c1.set_genome(g1)
+        c2 = deepcopy(parent1); c2.set_genome(g2)
+
+        if c1.check_validity_of_genome(verbose=False) and c2.check_validity_of_genome(verbose=False):
             if verbose:
-                print(f"[uniform_crossover] Success on attempt {attempt}")
-            return child
+                print(f"[uniform] success on attempt {attempt}")
+            return c1, c2
 
-    # 4) All retries failed -> fallback to fitter parent
     if verbose:
-        print("[uniform_crossover] All retries failed, falling back to fitter parent")
-    fallback = parent1 if parent1.fitness <= parent2.fitness else parent2
-    return deepcopy(fallback)
+        print("[uniform] retries exhausted; falling back per child")
 
-
-def _repair_houses(self, genome: np.ndarray, template: SolutionRD) -> np.ndarray:
-        # How many slots in the “house segment”?
-        n_h = template.n_houses
-        # desired might look like {0:3, 1:3, 2:3, -1:1} if you have 10 total houses: 3 starter, 3 main, 3 dessert, 1 empty.
-        desired = {c: template.houses_per_course for c in range(template.n_courses)}
-        desired[-1] = template.empty_houses
-
-        # current counts. I.e., count what we actually have in newg[:n_h]
-        # E.g. current_counts might be {0:4, 1:2, 2:3, -1:1} if uniform crossover gave us 4 starters instead of 3.
-        vals, cnts = np.unique(genome[:n_h], return_counts=True)
-        current_counts = dict(zip(vals.tolist(), cnts.tolist()))
-
-        # find over/under counts 
-        # I.e., Compare “have” vs. “want” to list which values are over and under represented.
-        over, under = [], []
-        for val, want in desired.items():
-            have = current_counts.get(val, 0)
-            if have > want:
-                over.extend([val] * (have - want))
-            elif have < want:
-                under.extend([val] * (want - have))
-
-        # if no over/under counts, return genome
-        if not over and not under:
-            return genome
-
-        # positions of over-represented values
-        positions = {v: np.where(genome[:n_h] == v)[0].tolist() for v in set(over)}
-        np.random.shuffle(under)
-
-        # replace excess occurrences
-        for v in over:
-            idx_list = positions[v]
-            idx = idx_list.pop(np.random.randint(len(idx_list)))
-            genome[idx] = under.pop()
-        return genome
-
-
-def _repair_participants(
-    genome: np.ndarray,
-    template: SolutionRD
-) -> np.ndarray:
-    """
-    Repair each course's participant block so that:
-      - Each guest ID 0..n_participants-1 appears exactly once per block
-      - Exactly `empty_spots` placeholder values (-1) per block
-
-    Args:
-        genome (np.ndarray): Full genome array (houses + participant blocks).
-        template (SolutionRD): A reference solution carrying block sizes.
-
-    Returns:
-        np.ndarray: The genome with corrected participant blocks.
-    """
-    # Compute offsets and block length
-    n_h   = template.n_houses                 # number of house-assignment genes
-    n_p   = template.n_participants            # number of distinct guests
-    e_sp  = template.empty_spots               # number of empty seats per course
-    blk   = n_p + e_sp                         # length of each course's block
-
-    # Loop over each course block
-    for course in range(template.n_courses):
-        start = n_h + course * blk             # index where this block begins
-        block = genome[start : start + blk]    # slice out the block
-
-        # Count occurrences of each value in the block
-        vals, cnts = np.unique(block, return_counts=True)
-        count      = dict(zip(vals.tolist(), cnts.tolist()))
-
-        # Build desired counts: 1 of each guest, plus e_sp of -1
-        desired = {p: 1 for p in range(n_p)}
-        if e_sp:
-            desired[-1] = e_sp
-
-        # Identify over- and under-represented values
-        over, under = [], []
-        for v, want in desired.items():
-            have = count.get(v, 0)
-            if have > want:
-                # too many of v → will need to replace (have-want) occurrences
-                over.extend([v] * (have - want))
-            elif have < want:
-                # too few of v → need to add (want-have) occurrences
-                under.extend([v] * (want - have))
-
-        # If any imbalance, perform swaps
-        if over:
-            # map each over-represented value to its indices in the block
-            pos_map = {
-                v: list(np.where(block == v)[0])
-                for v in set(over)
-            }
-            np.random.shuffle(under)            # randomize replacement order
-
-            # For each extra occurrence, replace one at random
-            for v in over:
-                idx_list = pos_map[v]           # positions holding the surplus value
-                i = idx_list.pop(
-                    np.random.randint(len(idx_list))
-                )                               # pick one index to replace
-                block[i] = under.pop()          # replace with a needed value
-
-            # Write the repaired block back into the genome
-            genome[start : start + blk] = block
-
-    # Return the fully repaired genome array
-    return genome
+    fallback1 = deepcopy(parent1 if parent1.fitness <= parent2.fitness else parent2)
+    fallback2 = deepcopy(parent1 if parent1.fitness <= parent2.fitness else parent2)
+    return fallback1, fallback2
 
 
 
