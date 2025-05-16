@@ -10,7 +10,7 @@ class Genome:
     # make a getter and a setter for house_assignments and course_assignments
     @property
     def house_assignments(self):
-        return self._house_assignments
+        return np.array(self._house_assignments, dtype=int)
     @house_assignments.setter
     def house_assignments(self, value):
         if not isinstance(value, np.ndarray):
@@ -18,7 +18,7 @@ class Genome:
         self._house_assignments = value
     @property
     def course_assignments(self):
-        return self._course_assignments
+        return np.array(self._course_assignments, dtype=int)
     @course_assignments.setter
     def course_assignments(self, value):
         if not isinstance(value, np.ndarray):

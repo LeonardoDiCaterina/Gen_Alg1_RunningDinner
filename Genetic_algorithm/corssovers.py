@@ -13,7 +13,6 @@ def logistic_crossover(genome1, genome2):
     new_gen2.house_assignments = logistic1
     new_gen2.secure_all_owner_to_houses()
     
-    
     return new_gen1, new_gen2
 
 
@@ -50,6 +49,14 @@ def social_crossover(genome1, genome2):
         new_course_i_1, new_course_i_2 = pillar_crossover(course_i_1, course_i_2)
         new_g1 = np.concatenate((new_g1, new_course_i_1))
         new_g2 = np.concatenate((new_g2, new_course_i_2))
+    
+    new_gen1 = deepcopy(genome1)
+    new_gen1.course_assignments = new_g1
+    #new_gen1.secure_all_owner_to_courses()
+    new_gen2 = deepcopy(genome2)
+    new_gen2.course_assignments = new_g2
+    #new_gen2.secure_all_owner_to_houses()
+    return new_gen1, new_gen2
 
 
 def logistic_crossover_2(genome1, genome2):
