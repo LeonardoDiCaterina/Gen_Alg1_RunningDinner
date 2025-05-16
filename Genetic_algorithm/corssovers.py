@@ -1,5 +1,6 @@
 from copy import deepcopy
 import numpy as np
+from Genetic_algorithm import config
 
 def logistic_crossover(genome1, genome2):
     logistic1 = genome1.house_assignments.copy()
@@ -15,6 +16,8 @@ def logistic_crossover(genome1, genome2):
     
     return new_gen1, new_gen2
 
+
+    
 def pillar_crossover(array1, array2):
     """
     Perform a pillar crossover between two arrays.
@@ -38,16 +41,27 @@ def pillar_crossover(array1, array2):
 
 def social_crossover(genome1, genome2):
     
-    
-    logistic1 = genome1.course_assignments.copy()
-    logistic2 = genome2.course_assignments.copy()
+    new_g1 = np.array([])
+    new_g2 = np.array([])
+    for i in range(config.N_COURSES):
+        course_i_1 = genome1.get_course_participants(i)
+        course_i_2 = genome2.get_course_participants(i)
+        
+        new_course_i_1, new_course_i_2 = pillar_crossover(course_i_1, course_i_2)
+        new_g1 = np.concatenate((new_g1, new_course_i_1))
+        new_g2 = np.concatenate((new_g2, new_course_i_2))
 
-    offspring1, offspring2 = pillar_crossover(logistic1, logistic2)
+
+def logistic_crossover_2(genome1, genome2):
+    logistic1 = genome1.house_assignments.copy()
+    logistic2 = genome2.house_assignments.copy()
+    
+    new_logistic1, new_logistic2 = pillar_crossover(logistic1, logistic2)
     new_gen1 = deepcopy(genome1)
-    new_gen2 = deepcopy(genome2)
-    new_gen1.course_assignments = offspring1
-    new_gen2.course_assignments = offspring2
+    new_gen1.house_assignments = new_logistic1
     new_gen1.secure_all_owner_to_houses()
+    new_gen2 = deepcopy(genome2)
+    new_gen2.house_assignments = new_logistic2
     new_gen2.secure_all_owner_to_houses()
     return new_gen1, new_gen2
 
