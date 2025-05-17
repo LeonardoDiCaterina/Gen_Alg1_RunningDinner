@@ -6,7 +6,7 @@ import numpy as np
 
 # make sure the input genome is type Genome
 
-def logistic_mutation(genome):
+def logistic_mutation(genome): #this one
     new_genome = deepcopy(genome)
     rand_1 = random.randint(0, config.N_HOUSES-1)
     rand_2 = random.randint(0, config.N_HOUSES-1)
@@ -16,7 +16,7 @@ def logistic_mutation(genome):
     return new_genome
     
 
-def social_mutation(genome):
+def social_mutation(genome): # this one
     new_genome = deepcopy(genome)
     rand_1 = random.randint(0, config.LEN_COURSE-1)
     rand_2 = random.randint(0, config.LEN_COURSE-1)
@@ -34,7 +34,7 @@ def pacman_mutation(array):
     new_genome = np.concat((array[window_size:], array[:window_size]))
     return new_genome
     
-def logistic_mutation_2(genome):
+def logistic_mutation_2(genome): # this one
 
     logistic_array = genome.house_assignments.copy()
     new_logistic_array = pacman_mutation(logistic_array)

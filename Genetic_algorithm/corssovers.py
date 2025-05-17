@@ -2,7 +2,7 @@ from copy import deepcopy
 import numpy as np
 from Genetic_algorithm import config
 
-def logistic_crossover(genome1, genome2):
+def full_crossover(genome1, genome2): # this one
     logistic1 = genome1.house_assignments.copy()
     logistic2 = genome2.house_assignments.copy()
 
@@ -38,7 +38,7 @@ def pillar_crossover(array1, array2):
     shuffled_array2[~mask] = np.random.permutation(array2[~mask])
     return shuffled_array1, shuffled_array2
 
-def social_crossover(genome1, genome2):
+def social_crossover(genome1, genome2): # this one
     
     new_g1 = np.array([])
     new_g2 = np.array([])
@@ -59,7 +59,7 @@ def social_crossover(genome1, genome2):
     return new_gen1, new_gen2
 
 
-def logistic_crossover_2(genome1, genome2):
+def logistic_crossover_2(genome1, genome2): # this one
     logistic1 = genome1.house_assignments.copy()
     logistic2 = genome2.house_assignments.copy()
     
