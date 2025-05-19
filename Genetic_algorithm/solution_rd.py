@@ -80,10 +80,14 @@ class SolutionRD(Individual):
         new_individual = deepcopy(self)
         if delete_fitness:
             new_individual._fitness = None
+        new_individual.genome = self.genome
+        new_individual.fitness_instance = self.fitness_instance
+        new_individual.mutation_functions = self.mutation_functions
+        new_individual.crossover_functions = self.crossover_functions
         return new_individual
     
     def __iter__(self):
-        for _ in range(self.mutation_count):
+        for _ in range(self.initial_population):
             yield next(self)
         
     def __next__(self):

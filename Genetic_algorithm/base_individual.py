@@ -8,7 +8,7 @@ class Individual(ABC):
     def __init__(self):
         self._mutation_probability = 0.1
         self._crossover_probability = 0.5
-        self.mutation_count = 5
+        self.initial_population = 5
         self._fitness = None
 
     @property
@@ -83,7 +83,7 @@ class Individual(ABC):
 
 
     def __iter__(self):
-        for _ in range(self.mutation_count):
+        for _ in range(self.initial_population):
             yield next(self)
         
     def __next__(self):
