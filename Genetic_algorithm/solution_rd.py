@@ -1,7 +1,7 @@
 import random
 import numpy as np
-from Genetic_algorithm.genome import Genome
-from Genetic_algorithm.fitness import ResourceFitness
+from Genetic_algorithm.genome_old import Genome
+from Genetic_algorithm.fitness_old import ResourceFitness
 from Genetic_algorithm.mutations import logistic_mutation, social_mutation, logistic_mutation_2
 from Genetic_algorithm.crossovers import social_crossover, logistic_crossover_2, full_crossover
 from Genetic_algorithm.base_individual import Individual

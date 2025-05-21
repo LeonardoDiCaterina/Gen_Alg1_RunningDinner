@@ -86,37 +86,13 @@ class ResourceFitness:
  
         
 
-    def _calculate_logistic_fitness(self, genome) -> float:
-        """
-        For each partecipant, compute:
-          1) home → first course (appetizer)
-          2) appetizer → main-course
-          3) main-course → dessert
-
-        Sum over all partecipants and invert.
-        """
-        total_distance = 0.0
-
+    def _calculate_logistic_fitness(self, genome):
+        distance = 0
         for partecipant in range(config.N_PARTICIPANTS):
-            # build their ordered stops
             itinerary = genome.get_partecipant_itinerary(partecipant)
-            stops = [h for (_, h) in itinerary if h != -1]
-            if not stops:
-                continue
-
-            # home → first stop
-            a, b = partecipant, stops[0]
-            if a > b:
-                a, b = b, a
-            total_distance += self.data_matrix[a, b]
-
-            # between-course legs
-            for prev_house, curr_house in zip(stops, stops[1:]):
-                a, b = prev_house, curr_house
-                if a > b:
-                    a, b = b, a
-                total_distance += self.data_matrix[a, b]
-
-        if total_distance <= 0:
-            return float("inf")
-        return self.max_logistic_score / total_distance
+            for course in range(1,config.N_COURSES):
+                points = sorted([itinerary[course][-1],
+                               itinerary[course-1][-1]])
+                distance += self.data_matrix[points[0], points[1]]
+        return self.max_logistic_score/distance
+    

@@ -5,7 +5,7 @@ from Genetic_algorithm.solution_rd import SolutionRD
 
 def tournament_selection(
     population: List[SolutionRD],
-    maximization: bool = False,
+    maximization: bool = True,
     k: int = 3
 ) -> SolutionRD:
     """
@@ -15,7 +15,7 @@ def tournament_selection(
     ----------
     population : List[SolutionRD]
         Current population.
-    maximization : bool, default=False
+    maximization : bool, default=True
         If False, lower fitness is better (minimize). If True, higher fitness is better.
     k : int, default=3
         Tournament size (number of contestants).
@@ -39,7 +39,7 @@ def tournament_selection(
 
 def rank_selection(
     population: List[SolutionRD],
-    maximization: bool = False
+    maximization: bool = True
 ) -> SolutionRD:
     """
     Rank-based roulette selection.
@@ -52,7 +52,7 @@ def rank_selection(
     ----------
     population : List[Individual]
         Current population.
-    maximization : bool, default False
+    maximization : bool, default True
         If False, lower fitness is better; if True, higher fitness is better.
 
     Returns

@@ -1,6 +1,6 @@
 import random
 import Genetic_algorithm.config as config
-from Genetic_algorithm.genome import Genome
+from Genetic_algorithm.genome_old import Genome
 from copy import deepcopy
 import numpy as np
 
