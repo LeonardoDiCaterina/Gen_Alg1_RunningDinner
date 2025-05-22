@@ -7,7 +7,7 @@ MIN_N_HOUSES = HOUSES_PER_COURSE * N_COURSES
 N_HOUSES = MIN_N_HOUSES + 1
 EMPTY_SPOTS = HOUSES_PER_COURSE * HOUSE_CAPACITY - N_PARTICIPANTS
 EMPTY_HOUSES = N_HOUSES - MIN_N_HOUSES
-LEN_COURSE = N_PARTICIPANTS + EMPTY_SPOTS
+LEN_COURSE = HOUSES_PER_COURSE * HOUSE_CAPACITY # I changed Leo's N_PARTICIPANTS + EMPTY_SPOTS
 #min_n_houses, n_houses, empty_spots 
 
 #n_spot_in_course = int(np.ceil(self.min_n_houses/self.n_courses)*self.capacity_of_houses)

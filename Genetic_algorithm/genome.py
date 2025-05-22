@@ -2,11 +2,48 @@ import random
 import numpy as np
 import Genetic_algorithm.config as config
 
-class Genome:
-    def __init__(self):
-        # generate and secure a valid random genome
-        self._house_assignments, self._course_assignments = self.generate_random_genome()
 
+class Genome:
+    """A single solution (chromosome) for the running–dinner optimisation.
+
+    A genome is composed of two concatenated integer arrays:
+
+    * **house_assignments** – length = ``N_HOUSES``.  
+      Entry *i* tells **which course** (``0 = appetiser``, ``1 = main``,
+      ``2 = dessert``) is served in house *i*.  ``-1`` means that the house is
+      unused.
+
+    * **course_assignments** – length = ``LEN_COURSE × N_COURSES``.  
+      It is split into ``N_COURSES`` blocks.  Each block contains
+      ``LEN_COURSE = N_PARTICIPANTS + EMPTY_SPOTS`` seats and is itself divided
+      into contiguous sub‑blocks of ``HOUSE_CAPACITY`` seats (one sub‑block per
+      house serving that course).  The value in a seat is the **participant
+      id** or ``-1`` for an empty seat.
+
+    Three *hard* constraints must always hold – both in randomly generated
+    individuals and after every variation operator (mutation, crossover, …):
+
+    1. **Every participant sits *exactly once* in each course.**
+    2. **The host of every house is seated in their own house.**  (Participant
+       *i* is the host of house *i*.)
+    3. **Every course block contains precisely ``EMPTY_SPOTS`` empty seats.**
+
+    The class provides a *repair loop* that enforces those constraints, and all
+    public methods that can break them call the loop automatically.
+    """
+
+    # ------------------------------------------------------------------ #
+    # Construction                                                        #
+    # ------------------------------------------------------------------ #
+    def __init__(self):
+        self._house_assignments, self._course_assignments = (
+            self.generate_random_genome())
+        # paranoia – but cheap: be 100 % sure of validity
+        self.fix_course_assignments(inplace=True)
+
+    # ------------------------------------------------------------------ #
+    # Array properties                                                    #
+    # ------------------------------------------------------------------ #
     @property
     def house_assignments(self):
         return np.array(self._house_assignments, dtype=int)
@@ -14,7 +51,7 @@ class Genome:
     @house_assignments.setter
     def house_assignments(self, value):
         if not isinstance(value, np.ndarray):
-            raise ValueError("house_assignments must be a numpy array.")
+            raise ValueError("house_assignments must be a numpy array")
         self._house_assignments = value
 
     @property
@@ -24,177 +61,372 @@ class Genome:
     @course_assignments.setter
     def course_assignments(self, value):
         if not isinstance(value, np.ndarray):
-            raise ValueError("course_assignments must be a numpy array.")
+            raise ValueError("course_assignments must be a numpy array")
         self._course_assignments = value
 
+    # ------------------------------------------------------------------ #
+    # Encoding & decoding                                                 #
+    # ------------------------------------------------------------------ #
     def encode(self):
+        """Return a flat numpy array suitable for GA operators."""
         return np.concatenate((self.house_assignments, self.course_assignments))
 
     def decode(self):
         return self.house_assignments, self.course_assignments
 
+    # ------------------------------------------------------------------ #
+    # Random genome                                                       #
+    # ------------------------------------------------------------------ #
     @classmethod
     def generate_random_genome(cls):
-        # 1) random house assignments (exactly MIN_N_HOUSES courses then empty)
-        counts = config.MIN_N_HOUSES // config.N_COURSES
-        remainder = config.MIN_N_HOUSES % config.N_COURSES
-        base = np.repeat(
-            np.arange(config.N_COURSES),
-            counts
-        )
-        if remainder > 0:
-            base = np.concatenate((base, np.arange(remainder)))
-        empty_h = np.full(config.N_HOUSES - config.MIN_N_HOUSES, -1)
-        houses = np.concatenate((base, empty_h)).astype(int)
+        """Create **one** random genome *already satisfying* all hard
+        constraints."""
+        # 1) House assignments ------------------------------------------------
+        reps   = config.MIN_N_HOUSES // config.N_COURSES
+        rem    = config.MIN_N_HOUSES %  config.N_COURSES
+        houses = np.repeat(np.arange(config.N_COURSES), reps)
+        if rem:
+            houses = np.concatenate((houses, np.arange(rem)))
+        houses = np.concatenate((houses,
+                                 np.full(config.N_HOUSES - len(houses), -1)))
         np.random.shuffle(houses)
 
-        # 2) random course assignments
-        pool = np.concatenate((
-            np.arange(config.N_PARTICIPANTS),
-            np.full(config.EMPTY_SPOTS, -1)
-        ))
+        # 2) Course assignments ----------------------------------------------
+        base_pool = np.concatenate((np.arange(config.N_PARTICIPANTS),
+                                     np.full(config.EMPTY_SPOTS, -1)))
         courses = []
         for _ in range(config.N_COURSES):
-            np.random.shuffle(pool)
-            courses.append(pool.copy())
+            np.random.shuffle(base_pool)
+            courses.append(base_pool.copy())
         courses = np.concatenate(courses)
 
-        # 3) secure hosts into their blocks
+        # 3) Finalise into a valid genome ------------------------------------
         temp = cls.__new__(cls)
-        temp._house_assignments  = houses.copy()
-        temp._course_assignments = courses.copy()
+        temp._house_assignments  = houses.astype(int)
+        temp._course_assignments = courses.astype(int)
         temp.secure_all_owner_to_houses()
+        temp.fix_course_assignments(inplace=True)
+        return temp._house_assignments, temp._course_assignments
         return temp._house_assignments, temp._course_assignments
 
+    # ------------------------------------------------------------------ #
+    # Positional helpers                                                 #
+    # ------------------------------------------------------------------ #
     def get_course_position(self, course_index):
-        if course_index < 0 or course_index >= config.N_COURSES:
-            raise IndexError("Course index out of range.")
+        """Return *(start, end)* indices (Python slice style) of the course
+        block inside *course_assignments*."""
+        if not 0 <= course_index < config.N_COURSES:
+            raise IndexError("Course index out of range")
         start = course_index * config.LEN_COURSE
         return start, start + config.LEN_COURSE
 
     def get_houses_in_course(self, course_index):
-        if course_index < 0 or course_index >= config.N_COURSES:
-            raise IndexError("Course index out of range.")
-        return np.sort(np.where(self.house_assignments == course_index)[0])
+        """`np.array` of houses that host *course_index* (sorted)."""
+        return np.sort(np.where(self._house_assignments == course_index)[0])
 
     def get_house_position(self, house_index):
-        if house_index < 0 or house_index >= config.N_HOUSES:
-            raise IndexError("House index out of range.")
-        course = self.house_assignments[house_index]
+        """Return *(start, end)* indices of the seat sub‑block corresponding
+        to *house_index* inside *course_assignments*.  Returns ``(-1, -1)`` for
+        unused houses."""
+        course = self._house_assignments[house_index]
         if course == -1:
             return -1, -1
         houses = self.get_houses_in_course(course)
-        idxs = np.where(houses == house_index)[0]
-        if idxs.size == 0:
-            return -1, -1
-        start, _ = self.get_course_position(course)
-        start += idxs[0] * config.HOUSE_CAPACITY
+        local  = np.where(houses == house_index)[0][0]
+        cs, _  = self.get_course_position(course)
+        start  = cs + local * config.HOUSE_CAPACITY
         return start, start + config.HOUSE_CAPACITY
 
-    def get_course_participants(self, course_index):
-        start, end = self.get_course_position(course_index)
-        return self.course_assignments[start:end]
+    # ------------------------------------------------------------------ #
+    # Validation                                                         #
+    # ------------------------------------------------------------------ #
+    def _course_valid(self, course_index):
+        cs, ce = self.get_course_position(course_index)
+        block  = self._course_assignments[cs:ce]
 
+        # empty seats count
+        if (block == -1).sum() != config.EMPTY_SPOTS:
+            return False
+
+        # duplicates & missing participants
+        players = block[block != -1]
+        if players.size != config.N_PARTICIPANTS:
+            return False
+        if np.unique(players).size != players.size:
+            return False
+
+        # each host present in its house
+        for h in self.get_houses_in_course(course_index):
+            hs, he = self.get_house_position(h)
+            if not (self._course_assignments[hs:he] == h).any():
+                return False
+        return True
+
+    def is_valid(self):
+        return all(self._course_valid(c) for c in range(config.N_COURSES))
+
+    # ------------------------------------------------------------------ #
+    # Repair helpers                                                     #
+    # ------------------------------------------------------------------ #
+    def _fix_hosts(self):
+        """Ensure every host sits in their own house (one pass)."""
+        for h in range(config.N_HOUSES):
+            course = self._house_assignments[h]
+            if course == -1:
+                continue  # unused house
+            hs, he = self.get_house_position(h)
+            if (self._course_assignments[hs:he] == h).any():
+                continue  # already seated
+
+            # 1) Replace an empty seat in that house if possible -------------
+            empties = np.where(self._course_assignments[hs:he] == -1)[0]
+            if len(empties):
+                self._course_assignments[hs + empties[0]] = h
+                continue
+
+            # 2) Re‑use a duplicate somewhere else in the course -------------
+            cs, ce = self.get_course_position(course)
+            block  = self._course_assignments[cs:ce]
+            vals, counts = np.unique(block[block != -1], return_counts=True)
+            dupes = vals[counts > 1]
+            if len(dupes):
+                idx = np.where(block == dupes[0])[0][-1]
+                self._course_assignments[cs + idx] = h
+                continue
+
+            # 3) Last resort: steal a random seat in own house ---------------
+            swap_idx = random.randint(hs, he - 1)
+            self._course_assignments[swap_idx] = h
+
+    def _deduplicate_and_fill(self):
+        """For every course block remove duplicates and insert missing
+        participants (tries not to disturb hosts)."""
+        full_set = set(range(config.N_PARTICIPANTS))
+        for c in range(config.N_COURSES):
+            cs, ce = self.get_course_position(c)
+            block  = self._course_assignments[cs:ce]
+
+            # --- 1) remove extras ------------------------------------------
+            players = block[block != -1]
+            uniq, counts = np.unique(players, return_counts=True)
+            for val, cnt in zip(uniq, counts):
+                if cnt > 1:
+                    # keep first occurrence only
+                    idxs = np.where(block == val)[0][1:]
+                    block[idxs] = -1
+
+            # --- 2) add missing participants -------------------------------
+            present  = set(block[block != -1])
+            missing  = list(full_set - present)
+            empties  = np.where(block == -1)[0]
+            for seat, p in zip(empties, missing):
+                block[seat] = p
+
+            self._course_assignments[cs:ce] = block
+
+    def _ensure_empty_seats(self):
+        """Adjust every course block to contain exactly `EMPTY_SPOTS` seats
+        marked with -1 while keeping hosts seated."""
+        for c in range(config.N_COURSES):
+            cs, ce = self.get_course_position(c)
+            block  = self._course_assignments[cs:ce]
+            diff   = (block == -1).sum() - config.EMPTY_SPOTS
+            if diff == 0:
+                continue  # already fine
+
+            elif diff > 0:  # too many empties -> fill some
+                present = set(block[block != -1])
+                addable = list(set(range(config.N_PARTICIPANTS)) - present)
+                empties = np.where(block == -1)[0]
+                for i in range(diff):
+                    block[empties[i]] = addable[i % len(addable)]
+
+            else:  # diff < 0 -> need more empties
+                need   = -diff
+                idxs   = list(range(len(block)))
+                random.shuffle(idxs)
+                for local in idxs:
+                    val = block[local]
+                    if val == -1:
+                        continue
+                    # do not remove a host from their house
+                    house_offset = local // config.HOUSE_CAPACITY
+                    house        = self.get_houses_in_course(c)[house_offset]
+                    if val == house:
+                        continue
+                    block[local] = -1
+                    need -= 1
+                    if need == 0:
+                        break
+
+            self._course_assignments[cs:ce] = block
+
+    # ------------------------------------------------------------------ #
+    # Public repair helpers                                              #
+    # ------------------------------------------------------------------ #
+    def secure_all_owner_to_houses(self):
+        """*Public helper* used by external code and by the random‑genome
+        factory: ensure every host is seated once in their own house (single
+        pass).  This does *not* guarantee overall validity – it is meant to be
+        followed by :py:meth:`fix_course_assignments`."""
+        self._fix_hosts()
+
+    # ------------------------------------------------------------------ #
+    # Public repair                                                      #
+    # ------------------------------------------------------------------ #
+    def _rebuild_course_assignments(self):
+        """Completely regenerate *course_assignments* so that it is *guaranteed*
+        to satisfy all hard constraints, given the current
+        *house_assignments*.  Used as a fallback when the incremental repair
+        loop stalls (should be extremely rare)."""
+        for course in range(config.N_COURSES):
+            cs, ce = self.get_course_position(course)
+            block  = np.full(config.LEN_COURSE, -1, dtype=int)
+
+            # --- place hosts in their houses -----------------------------
+            houses = self.get_houses_in_course(course)
+            for i, house in enumerate(houses):
+                start = i * config.HOUSE_CAPACITY
+                block[start] = house  # first seat of the house sub‑block
+
+            # --- fill remaining seats with a permutation -----------------
+            hosts_set = set(houses)
+            participants = [p for p in range(config.N_PARTICIPANTS)
+                            if p not in hosts_set]
+            random.shuffle(participants)
+            seat_ptr = 0
+            for seat_idx in range(config.LEN_COURSE):
+                if block[seat_idx] != -1:
+                    continue  # already host
+                if seat_ptr < len(participants):
+                    block[seat_idx] = participants[seat_ptr]
+                    seat_ptr += 1
+                # else leave as -1 (empty seat) – by construction we hit
+                # exactly EMPTY_SPOTS empties when done
+
+            self._course_assignments[cs:ce] = block
+        assert self.is_valid(), "Rebuild failed to produce a valid genome"
+
+    # ------------------------------------------------------------------ #
+    # Public repair                                                      #
+    # ------------------------------------------------------------------ #
+    def fix_course_assignments(self, *, inplace=False):
+        """Repair *course_assignments* so that **all hard constraints hold**.
+
+        The function keeps iterating the deterministic repair passes until the
+        genome becomes valid.  In the extremely unlikely event that the
+        incremental loop makes no further progress, the whole seating plan is
+        rebuilt from scratch – *guaranteeing* success and preventing the GA
+        from ever crashing.
+        """
+        if not inplace:
+            genome = Genome.__new__(Genome)
+            genome._house_assignments  = self._house_assignments.copy()
+            genome._course_assignments = self._course_assignments.copy()
+        else:
+            genome = self
+
+        max_passes_without_progress = 10  # safety – usually 1–2 are enough
+        for _ in range(max_passes_without_progress):
+            if genome.is_valid():
+                return genome
+            before = genome._course_assignments.copy()
+            genome._fix_hosts()
+            genome._deduplicate_and_fill()
+            genome._fix_hosts()
+            genome._ensure_empty_seats()
+            if genome.is_valid():
+                return genome
+            if np.array_equal(before, genome._course_assignments):
+                # no progress – bail out to full rebuild
+                break
+
+        # Fallback: build a fresh valid seating from scratch ----------------
+        genome._rebuild_course_assignments()
+        return genome
+    
+    # ------------------------------------------------------------------ #
+    # GA‑level utilities                                                 #
+    # ------------------------------------------------------------------ #
     def get_house_partecipants(self, house_index):
-        # preserve original typo
-        if house_index < 0 or house_index >= config.N_HOUSES:
-            raise IndexError("House index out of range.")
-        course = self.house_assignments[house_index]
+        """Return an array of participant ids seated in *house_index* for the
+        course that house hosts.  (Misspelling kept for backward
+        compatibility.)  If the house is unused the array is empty."""
+        if not 0 <= house_index < config.N_HOUSES:
+            raise IndexError("House index out of range")
+        course = self._house_assignments[house_index]
         if course == -1:
             return np.array([], dtype=int)
-        start, end = self.get_house_position(house_index)
-        if start == -1:
-            return np.array([], dtype=int)
-        return self.course_assignments[start:end]
+        hs, he = self.get_house_position(house_index)
+        block = self._course_assignments[hs:he]
+        return block[block != -1]
 
-    def locate_participant_at_given_course(self, course_index, participant_number):
-        if participant_number < 0 or participant_number >= config.N_PARTICIPANTS:
-            raise IndexError("Participant index out of range.")
-        course_start, course_end = self.get_course_position(course_index)
+    # official spelling alias (optional)
+    get_house_participants = get_house_partecipants
+
+    def get_course_participants(self, course):
+        """Return a 1‑D `np.ndarray` of participant ids (no -1) seated in the
+        *whole* course block ``course``.  Empty seats are filtered out, order
+        is preserved."""
+        cs, ce = self.get_course_position(course)
+        block = self._course_assignments[cs:ce]
+        return block[block != -1]
+
+    # ------------------------------------------------------------------ #
+    # GA‑level utilities                                                 #
+    # ------------------------------------------------------------------ #
+    def locate_participant_at_given_course(self, course_index, participant):
+        cs, _ = self.get_course_position(course_index)
         houses = self.get_houses_in_course(course_index)
         for h in houses:
             hs, he = self.get_house_position(h)
-            if participant_number in self.course_assignments[hs:he]:
+            if participant in self._course_assignments[hs:he]:
                 return h
-        raise ValueError(f"Participant {participant_number} not found in course {course_index}.")
+        raise ValueError(f"Participant {participant} not found in course {course_index}")
 
     def swap_house_assigments(self, idx1, idx2):
-        if idx1 < 0 or idx1 >= config.N_HOUSES or idx2 < 0 or idx2 >= config.N_HOUSES:
-            raise IndexError("House index out of range.")
-        self.house_assignments[idx1], self.house_assignments[idx2] = (
-            self.house_assignments[idx2], self.house_assignments[idx1]
-        )
-        self.secure_all_owner_to_houses()
+        """Swap the *course* hosted by two houses and repair."""
+        self._house_assignments[idx1], self._house_assignments[idx2] = (
+            self._house_assignments[idx2], self._house_assignments[idx1])
+        # changing hosts/course assignments may invalidate seating
+        self.fix_course_assignments(inplace=True)
 
     def swap_course_assignments(self, course, idx1, idx2):
-        if idx1 < 0 or idx1 >= config.LEN_COURSE or idx2 < 0 or idx2 >= config.LEN_COURSE:
-            raise IndexError("Course seat index out of range.")
-        if course < 0 or course >= config.N_COURSES:
-            raise IndexError("Course index out of range.")
-        start, _ = self.get_course_position(course)
-        ra = self.course_assignments
-        ra[start + idx1], ra[start + idx2] = ra[start + idx2], ra[start + idx1]
-        self._course_assignments = ra
+        """Swap two seats *within the same course block* (cheap)."""
+        cs, _ = self.get_course_position(course)
+        ca = self._course_assignments
+        ca[cs + idx1], ca[cs + idx2] = ca[cs + idx2], ca[cs + idx1]
+        self._course_assignments = ca
+        # local swap can only break duplicates / host seating in that block
+        self.fix_course_assignments(inplace=True)
 
-    def secure_single_owner_to_house(self, house_number):
-        if house_number < 0 or house_number >= config.N_HOUSES:
-            raise IndexError("House index out of range.")
-        course = self.house_assignments[house_number]
-        if course == -1:
-            return
-        start, end = self.get_house_position(house_number)
-        owner = house_number
-        positions = np.where(self._course_assignments == owner)[0]
-        if not any(start <= p < end for p in positions):
-            if positions.size == 0:
-                return
-            p0 = positions[0]
-            swap = random.randint(start, end - 1)
-            ca = self._course_assignments
-            ca[p0], ca[swap] = ca[swap], ca[p0]
-            self._course_assignments = ca
-
-    def secure_all_owner_to_houses(self):
-        for h in range(config.N_HOUSES):
-            if self._house_assignments[h] != -1:
-                self.secure_single_owner_to_house(h)
-
+    # ------------------------------------------------------------------ #
+    # Misc.                                                               #
+    # ------------------------------------------------------------------ #
     def __str__(self):
         return ''.join(map(str, self.encode()))
 
     def semantic_key(self):
-        hased_h = self.house_assignments.copy()
-        hased_c = self.course_assignments.copy()
-        for i in range(int(len(hased_h) / config.HOUSE_CAPACITY)):
-            start = i * config.HOUSE_CAPACITY
-            hased_c[start:start + config.HOUSE_CAPACITY] = np.sort(
-                hased_c[start:start + config.HOUSE_CAPACITY]
-            )
-        arrb = np.concatenate((hased_h, hased_c)).tobytes()
-        return str(hash(arrb))
+        """Return a hash that is *invariant* to the within‑house seat order –
+        handy for duplicate detection in the GA population."""
+        h = self.house_assignments.copy()
+        c = self.course_assignments.copy()
+        # sort seats inside every house sub‑block
+        for course in range(config.N_COURSES):
+            houses = self.get_houses_in_course(course)
+            for i, hidx in enumerate(houses):
+                start, end = self.get_house_position(hidx)
+                c[start:end] = np.sort(c[start:end])
+        return str(hash(np.concatenate((h, c)).tobytes()))
 
-    def get_partecipant_itinerary(self, participant_index):
-        """
-        Get the itinerary of a participant in the genome as a fixed‐length
-        list of (course_index, house_index) tuples—one per course.
-        If the participant isn’t at a course, that entry is (-1, -1).
-        """
-        if participant_index < 0 or participant_index >= config.N_PARTICIPANTS:
-            raise IndexError("Participant index out of range.")
-
-        # 1) Pre-fill with “missing” markers so length == N_COURSES
-        itinerary = [(-1, -1) for _ in range(config.N_COURSES)]
-
-        # 2) For each course, try to find which house they sit at
-        for course_index in range(config.N_COURSES):
+    def get_partecipant_itinerary(self, participant):  # typo kept for API
+        if not 0 <= participant < config.N_PARTICIPANTS:
+            raise IndexError("Participant index out of range")
+        itinerary = [(-1, -1)] * config.N_COURSES
+        for c in range(config.N_COURSES):
             try:
-                house_index = self.locate_participant_at_given_course(
-                    course_index, participant_index
-                )
+                house = self.locate_participant_at_given_course(c, participant)
+                itinerary[c] = (c, house)
             except ValueError:
-                # not seated in this course
-                continue
-            itinerary[course_index] = (course_index, house_index)
-
-        # 3) Return a list of length N_COURSES
+                pass
         return itinerary
