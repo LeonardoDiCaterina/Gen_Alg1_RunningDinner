@@ -1,6 +1,29 @@
-# To do
+# Left to do
 
-- demo files for each .py script
+- Run the grid search at least 30 times for each combination of parameters
+
+- Save best fitness over generations for each run of combination of parameters 
+
+- Create a function to get average fitness over generations for each combinaiton of parameters and append my csv files with avg
+
+- Create a function to get std for both sides of the average and append the csv
+
+- Plot the best 5-8 runs with average and stds 
+
+- Test effect of mutations/crossovers
+
+- Create main notebook file with a GA run with the best parameters and explain the best solution. Decode the genome - what is the optimized running dinner configuration?
+
+- WRITE THE REPORT
+
+
+- in grid search, figure out wich optimization problem is the most difficult to solve (and try increase the prob of mutation/xo towoards that)
+
+- data ingestion show heatmap of the distance matrix (4 the report)
+
+- clean up files
+
+
 .
 ├── Classes
 │   ├── Individual.py
@@ -47,12 +70,3 @@
 │   └── tournament_selection.csv
 └── Visualization
     └── utils.py
-
-
-- create main notebook file with a GA run with the best parameters
-
-- in grid search, figure out wich optimization problem is the most difficult to solve (and try increase the prob of mutation/xo towoards that)
-
-- data ingestion show heatmap of the distance matrix (4 the report)
-
-- clean up files
