@@ -12,16 +12,15 @@ def logistic_mutation(genome): #this one
     rand_2 = random.randint(0, config.N_HOUSES-1)
     while rand_1 == rand_2:
         rand_2 = random.randint(0, config.N_HOUSES-1)
-    new_genome.swap_house_assigments(rand_1, rand_2)
+    new_genome.swap_house_assigments(rand_1, rand_2) # also fixes course assignments 
+#    new_genome.secure_all_owner_to_houses() 
     return new_genome
     
 
 def social_mutation(genome): # this one
     new_genome = deepcopy(genome)
-    rand_1 = random.randint(0, config.LEN_COURSE-1)
-    rand_2 = random.randint(0, config.LEN_COURSE-1)
-    while rand_1 == rand_2:
-        rand_2 = random.randint(0, config.LEN_COURSE-1)
+    rand_1 = random.randint(0, config.HOUSE_CAPACITY-1)
+    rand_2 = random.randint(0, config.HOUSE_CAPACITY-1) + config.HOUSE_CAPACITY
     rand_course = random.randint(0, config.N_COURSES-1)
     new_genome.swap_course_assignments(rand_course, rand_1, rand_2)
     return new_genome
@@ -40,5 +39,5 @@ def logistic_mutation_2(genome): # this one
     new_logistic_array = pacman_mutation(logistic_array)
     new_genome = deepcopy(genome)
     new_genome.house_assignments = new_logistic_array
-    new_genome.secure_all_owner_to_houses()
+    new_genome.fix_course_assignments()
     return new_genome

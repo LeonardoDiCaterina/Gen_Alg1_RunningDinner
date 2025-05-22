@@ -310,7 +310,7 @@ class Genome:
     # ------------------------------------------------------------------ #
     # Public repair                                                      #
     # ------------------------------------------------------------------ #
-    def fix_course_assignments(self, *, inplace=False):
+    def fix_course_assignments(self, *, inplace=True):
         """Repair *course_assignments* so that **all hard constraints hold**.
 
         The function keeps iterating the deterministic repair passes until the
@@ -332,6 +332,8 @@ class Genome:
                 return genome
             before = genome._course_assignments.copy()
             genome._fix_hosts()
+            if genome.is_valid():
+                return genome
             genome._deduplicate_and_fill()
             genome._fix_hosts()
             genome._ensure_empty_seats()

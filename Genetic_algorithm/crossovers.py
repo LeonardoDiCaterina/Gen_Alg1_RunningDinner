@@ -8,11 +8,12 @@ def full_crossover(genome1, genome2): # this one
 
     new_gen1 = deepcopy(genome1)
     new_gen1.house_assignments = logistic2
-    new_gen1.secure_all_owner_to_houses()
+    new_gen1.fix_course_assignments(inplace=True)
+
     new_gen2 = deepcopy(genome2)
     new_gen2.house_assignments = logistic1
-    new_gen2.secure_all_owner_to_houses()
-    
+    new_gen2.fix_course_assignments(inplace=True)
+
     return new_gen1, new_gen2
 
 
@@ -66,10 +67,10 @@ def logistic_crossover_2(genome1, genome2): # this one
     new_logistic1, new_logistic2 = pillar_crossover(logistic1, logistic2)
     new_gen1 = deepcopy(genome1)
     new_gen1.house_assignments = new_logistic1
-    new_gen1.secure_all_owner_to_houses()
+    new_gen1.fix_course_assignments()
     new_gen2 = deepcopy(genome2)
     new_gen2.house_assignments = new_logistic2
-    new_gen2.secure_all_owner_to_houses()
+    new_gen2.fix_course_assignments()
     return new_gen1, new_gen2
 
 
